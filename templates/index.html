@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload de PDF</title>
+</head>
+<body>
+    <h1>Upload de PDF para Resumo</h1>
+    <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
+        <input type="file" name="pdf" accept=".pdf" required>
+        <input type="submit" value="Enviar">
+    </form>
+    {% if summary %}
+        <h2>Resumo:</h2>
+        <p>{{ summary }}</p>
+    {% endif %}
+</body>
+</html>
