@@ -1,17 +1,78 @@
-from flask import Flask, render_template, request, redirect, url_for 
+from flask import Flask, render_template, request, redirect, url_for, send_file
 import os
-import fitz  
+import fitz
+import pytesseract
+from PyPDF2 import PdfReader, PdfWriter
+import pdfplumber
+from PIL import Image
 from transformers import pipeline
+import re
+import sys
+import zipfile
 
 app = Flask(__name__)
-
 
 UPLOAD_FOLDER = 'PDF_ARCH'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-
 summarizer = pipeline("summarization")
+
+# Caminho para o arquivo ZIP de saída
+ZIP_PATH = os.path.join(UPLOAD_FOLDER, "comprovantes.zip")
+
+# Funções de manipulação de CPF
+def setup_log_file(log_file):
+    sys.stdout = open(log_file, 'w')
+
+def sanitize_filename(cpf):
+    return re.sub(r'[<>:"/\\|?*]', '_', cpf)
+
+def formatar_cpf(cpf):
+    return cpf.replace('.', '').replace('-', '').strip()
+
+def cpf_na_pagina(cpf, texto):
+    cpf_formatado = formatar_cpf(cpf)
+    texto_limpo = re.sub(r'\D', '', texto)
+    return cpf_formatado in texto_limpo
+
+def ocr_para_texto(imagem_path):
+    imagem_pil = Image.open(imagem_path)
+    imagem_pil = imagem_pil.convert('L')
+    return pytesseract.image_to_string(imagem_pil)
+
+def busca_e_salva_pdfs(pdf_path, cpfs_file, log_file):
+    setup_log_file(log_file)
+    with open(cpfs_file, 'r') as f:
+        cpfs = [linha.strip() for linha in f.readlines()]
+
+    cpfs_nao_encontrados = cpfs.copy()
+    comprovantes_paths = []
+
+    with pdfplumber.open(pdf_path) as pdf_plumber:
+        for i, pagina_plumber in enumerate(pdf_plumber.pages):
+            texto = pagina_plumber.extract_text()
+            if texto:
+                for cpf in cpfs:
+                    if cpf_na_pagina(cpf, texto):
+                        cpf_formatado = formatar_cpf(cpf)
+                        nome_arquivo = f"{sanitize_filename(cpf_formatado)}_pagina_{i+1}.pdf"
+                        writer = PdfWriter()
+                        pagina_pypdf = PdfReader(pdf_path).pages[i]
+                        writer.add_page(pagina_pypdf)
+                        output_path = os.path.join(UPLOAD_FOLDER, nome_arquivo)
+                        comprovantes_paths.append(output_path)
+                        with open(output_path, 'wb') as output_pdf:
+                            writer.write(output_pdf)
+                        cpfs_nao_encontrados.remove(cpf)
+
+    # Criar um arquivo ZIP com todos os comprovantes
+    with zipfile.ZipFile(ZIP_PATH, 'w') as zipf:
+        for file_path in comprovantes_paths:
+            zipf.write(file_path, os.path.basename(file_path))
+
+    sys.stdout.close()
+    return ZIP_PATH
 
 def extract_text_from_pdf(pdf_path):
     """Extrai o texto de um arquivo PDF."""
@@ -24,31 +85,19 @@ def extract_text_from_pdf(pdf_path):
 
 def summarize_text(text):
     """Gera um resumo do texto usando um modelo de NLP."""
-    
-    # Verifica o comprimento em tokens
-    token_limit = 1024
-    tokens = text.split()  # Divide o texto em palavras (tokens)
+    token_limit = 512  # Ajustado para evitar erros de sequência longa
+    tokens = text.split()
 
     if len(tokens) > token_limit:
-        # Trunca o texto se exceder o limite
         text = ' '.join(tokens[:token_limit])
-
     elif len(tokens) < 100:
-        return text  # Retorna o texto se for muito curto
-
-    print("Comprimento do texto:", len(tokens))
-    print("Texto para resumo:", text[:500])  # Mostre os primeiros 500 caracteres
+        return text
 
     try:
         summary = summarizer(text, max_length=130, min_length=30, do_sample=False)
-        
-        if summary:
-            return summary[0]['summary_text']
-        else:
-            return "Resumo não pôde ser gerado."
+        return summary[0]['summary_text'] if summary else "Resumo não pôde ser gerado."
     except Exception as e:
         return f"Erro ao gerar resumo: {str(e)}"
-
 
 @app.route('/')
 def index():
@@ -56,25 +105,37 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'pdf' not in request.files:
+    if 'pdf' not in request.files or 'cpfs_file' not in request.files:
         return "Nenhum arquivo foi enviado", 400
-    
-    file = request.files['pdf']
-    if file.filename == '':
+
+    pdf_file = request.files['pdf']
+    cpfs_file = request.files['cpfs_file']
+
+    if pdf_file.filename == '' or cpfs_file.filename == '':
         return "Nome do arquivo vazio", 400
-    
-    if file and file.filename.endswith('.pdf'):
-        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(pdf_path)
 
-        # Extrai texto e gera resumo
-        pdf_text = extract_text_from_pdf(pdf_path)
-        summary = summarize_text(pdf_text)
+    action = request.form.get('action')
 
-        # Renderiza a página com o resumo
-        return render_template('index.html', summary=summary)
+    if pdf_file and pdf_file.filename.endswith('.pdf') and cpfs_file and cpfs_file.filename.endswith('.txt'):
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
+        cpfs_file_path = os.path.join(app.config['UPLOAD_FOLDER'], cpfs_file.filename)
+        pdf_file.save(pdf_path)
+        cpfs_file.save(cpfs_file_path)
 
-    return "Arquivo inválido. Por favor, envie um PDF.", 400
+        if action == "resumo":
+            pdf_text = extract_text_from_pdf(pdf_path)
+            summary = summarize_text(pdf_text)
+            return render_template('index.html', summary=summary, upload_success=True)
+
+        elif action == "comprovantes":
+            zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path, log_file='cpf_log.txt')
+            return render_template('index.html', zip_file=True, upload_success=True)
+
+    return "Arquivo inválido. Por favor, envie um PDF e uma lista de CPFs em .txt", 400
+
+@app.route('/download_zip')
+def download_zip():
+    return send_file(ZIP_PATH, as_attachment=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
