@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, send_file
+from flask import Flask, render_template, request, send_file
 import fitz
 import pytesseract
 from PyPDF2 import PdfReader, PdfWriter
@@ -56,9 +56,10 @@ def busca_e_salva_pdfs(pdf_path, cpfs_file):
                         comprovantes_paths.append(output_path)
                         with open(output_path, 'wb') as output_pdf:
                             writer.write(output_pdf)
-                        cpfs_nao_encontrados.remove(cpf)
+                        if cpf in cpfs_nao_encontrados:
+                            cpfs_nao_encontrados.remove(cpf)
 
-    # Criar um arquivo ZIP com todos os comprovantes
+    # Criar um arquivo ZIP com todos os comprovantes encontrados
     with zipfile.ZipFile(ZIP_PATH, 'w') as zipf:
         for file_path in comprovantes_paths:
             zipf.write(file_path, os.path.basename(file_path))
@@ -93,33 +94,42 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'pdf' not in request.files or 'cpfs_file' not in request.files:
-        return "Nenhum arquivo foi enviado", 400
+    # Verificação mais clara dos arquivos e ações
+    if 'pdf' not in request.files:
+        return "Nenhum arquivo PDF foi enviado", 400
 
     pdf_file = request.files['pdf']
-    cpfs_file = request.files['cpfs_file']
-
-    if pdf_file.filename == '' or cpfs_file.filename == '':
-        return "Nome do arquivo vazio", 400
-
     action = request.form.get('action')
 
-    if pdf_file and pdf_file.filename.endswith('.pdf') and cpfs_file and cpfs_file.filename.endswith('.txt'):
-        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
+    # Verifica se o arquivo PDF foi selecionado corretamente
+    if pdf_file.filename == '':
+        return "Nome do arquivo PDF vazio", 400
+
+    pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
+    pdf_file.save(pdf_path)
+
+    # Se a ação for buscar comprovantes, o arquivo de CPFs é necessário
+    if action == "comprovantes":
+        if 'cpfs_file' not in request.files:
+            return "Nenhum arquivo de CPFs foi enviado", 400
+        cpfs_file = request.files['cpfs_file']
+        if cpfs_file.filename == '':
+            return "Nome do arquivo de CPFs vazio", 400
+
         cpfs_file_path = os.path.join(app.config['UPLOAD_FOLDER'], cpfs_file.filename)
-        pdf_file.save(pdf_path)
         cpfs_file.save(cpfs_file_path)
 
-        if action == "resumo":
-            pdf_text = extract_text_from_pdf(pdf_path)
-            summary = summarize_text(pdf_text)
-            return render_template('index.html', summary=summary, upload_success=True)
+        # Buscar e salvar comprovantes no ZIP
+        zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path)
+        return render_template('index.html', zip_file=True, upload_success=True)
 
-        elif action == "comprovantes":
-            zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path)
-            return render_template('index.html', zip_file=True, upload_success=True)
+    elif action == "resumo":
+        # Gerar resumo do PDF
+        pdf_text = extract_text_from_pdf(pdf_path)
+        summary = summarize_text(pdf_text)
+        return render_template('index.html', summary=summary, upload_success=True)
 
-    return "Arquivo inválido. Por favor, envie um PDF e uma lista de CPFs em .txt", 400
+    return "Ação inválida. Por favor, tente novamente.", 400
 
 @app.route('/download_zip')
 def download_zip():
