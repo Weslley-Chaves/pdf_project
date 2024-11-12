@@ -3,6 +3,7 @@ PyMuPDF==1.22.0
 pytesseract==0.3.8
 pdfplumber==0.5.28
 Pillow==8.3.1
-transformers==4.9.1
+transformers==4.12.5  # Versão mais recente e compatível
+tokenizers==0.10.1    # Versão que provavelmente possui o `wheel` pré-compilado
 torch==2.0.0
-tokenizers==0.10.3
+
