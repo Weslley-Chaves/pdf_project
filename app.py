@@ -6,7 +6,6 @@ from PyPDF2 import PdfReader, PdfWriter
 import pdfplumber
 from PIL import Image
 import re
-import sys
 import zipfile
 
 app = Flask(__name__)
@@ -19,9 +18,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ZIP_PATH = os.path.join(UPLOAD_FOLDER, "comprovantes.zip")
 
 # Funções de manipulação de CPF
-def setup_log_file(log_file):
-    sys.stdout = open(log_file, 'w')
-
 def sanitize_filename(cpf):
     return re.sub(r'[<>:"/\\|?*]', '_', cpf)
 
@@ -38,8 +34,7 @@ def ocr_para_texto(imagem_path):
     imagem_pil = imagem_pil.convert('L')
     return pytesseract.image_to_string(imagem_pil)
 
-def busca_e_salva_pdfs(pdf_path, cpfs_file, log_file):
-    setup_log_file(log_file)
+def busca_e_salva_pdfs(pdf_path, cpfs_file):
     with open(cpfs_file, 'r') as f:
         cpfs = [linha.strip() for linha in f.readlines()]
 
@@ -68,7 +63,6 @@ def busca_e_salva_pdfs(pdf_path, cpfs_file, log_file):
         for file_path in comprovantes_paths:
             zipf.write(file_path, os.path.basename(file_path))
 
-    sys.stdout.close()
     return ZIP_PATH
 
 def extract_text_from_pdf(pdf_path):
@@ -122,7 +116,7 @@ def upload_file():
             return render_template('index.html', summary=summary, upload_success=True)
 
         elif action == "comprovantes":
-            zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path, log_file='cpf_log.txt')
+            zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path)
             return render_template('index.html', zip_file=True, upload_success=True)
 
     return "Arquivo inválido. Por favor, envie um PDF e uma lista de CPFs em .txt", 400
@@ -133,3 +127,4 @@ def download_zip():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
