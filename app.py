@@ -1,6 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file
+from flask import Flask, render_template, request, send_file, flash
 import os
-import fitz
+import fitz  # PyMuPDF
 import pytesseract
 from PyPDF2 import PdfReader, PdfWriter
 import pdfplumber
@@ -9,6 +9,7 @@ import re
 import zipfile
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # Necessário para mensagens flash
 
 UPLOAD_FOLDER = 'PDF_ARCH'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -76,16 +77,22 @@ def extract_text_from_pdf(pdf_path):
 
 def summarize_text(text):
     """Retorna um resumo simplificado do texto."""
-    token_limit = 512  # Ajustado para evitar erros de sequência longa
+    if not text.strip():
+        return "Nenhum texto encontrado no PDF para resumir."
+
+    # Limite de tokens para o resumo
+    token_limit = 512
     tokens = text.split()
 
+    # Se o texto for muito grande, reduzir para o limite de tokens
     if len(tokens) > token_limit:
         text = ' '.join(tokens[:token_limit])
     elif len(tokens) < 100:
         return text
 
-    # Versão simplificada do resumo
-    return text[:500] + "..." if len(text) > 500 else text
+    # Retornar uma versão truncada do texto como resumo
+    summary = text[:500] + "..." if len(text) > 500 else text
+    return summary
 
 @app.route('/')
 def index():
@@ -93,18 +100,21 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # Verificar se os arquivos estão presentes no request
     if 'pdf' not in request.files or 'cpfs_file' not in request.files:
-        return "Nenhum arquivo foi enviado", 400
+        flash("Nenhum arquivo foi enviado", "error")
+        return redirect(url_for('index'))
 
     pdf_file = request.files['pdf']
     cpfs_file = request.files['cpfs_file']
 
     if pdf_file.filename == '' or cpfs_file.filename == '':
-        return "Nome do arquivo vazio", 400
+        flash("Nome do arquivo vazio", "error")
+        return redirect(url_for('index'))
 
     action = request.form.get('action')
 
-    if pdf_file and pdf_file.filename.endswith('.pdf') and cpfs_file and cpfs_file.filename.endswith('.txt'):
+    if pdf_file and pdf_file.filename.endswith('.pdf') and (cpfs_file.filename.endswith('.txt') or action == "resumo"):
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
         cpfs_file_path = os.path.join(app.config['UPLOAD_FOLDER'], cpfs_file.filename)
         pdf_file.save(pdf_path)
@@ -113,13 +123,17 @@ def upload_file():
         if action == "resumo":
             pdf_text = extract_text_from_pdf(pdf_path)
             summary = summarize_text(pdf_text)
-            return render_template('index.html', summary=summary, upload_success=True)
+            if summary:
+                flash("Resumo gerado com sucesso!", "success")
+            return render_template('index.html', summary=summary)
 
         elif action == "comprovantes":
             zip_file_path = busca_e_salva_pdfs(pdf_path, cpfs_file_path)
-            return render_template('index.html', zip_file=True, upload_success=True)
+            flash("Comprovantes gerados e compactados com sucesso!", "success")
+            return render_template('index.html', zip_file=True)
 
-    return "Arquivo inválido. Por favor, envie um PDF e uma lista de CPFs em .txt", 400
+    flash("Arquivo inválido. Por favor, envie um PDF e uma lista de CPFs em .txt", "error")
+    return redirect(url_for('index'))
 
 @app.route('/download_zip')
 def download_zip():
@@ -127,5 +141,6 @@ def download_zip():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 

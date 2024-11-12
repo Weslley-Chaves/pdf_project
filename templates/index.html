@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Ferramenta de PDF</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" integrity="sha512-Fo3rlrZj/k7ujTnHq6Op9FQR1ZZZYg5BHZzHfNffAoYrUtQft4PAE8LlBZ44FQ7U7oL0IlnhVemXs0Lxuxtulw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
     <!-- Script JavaScript para alternância de tema e manipulação de arquivos -->
     <script>
@@ -12,6 +13,12 @@
         // Alterna entre os modos claro e escuro
         function toggleTheme() {
             document.body.classList.toggle("dark-mode");
+            const themeButton = document.querySelector('.toggle-theme');
+            if (document.body.classList.contains("dark-mode")) {
+                themeButton.textContent = "☀️ Modo Claro";
+            } else {
+                themeButton.textContent = "🌙 Modo Escuro";
+            }
         }
 
         // Função para exibir o campo CPF apenas quando "Buscar Comprovantes" é selecionado
@@ -50,7 +57,10 @@
             for (const [key, fileName] of Object.entries(uploadedFiles)) {
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
-                fileItem.innerHTML = `${fileName} <button onclick="removeFile('${key}')">Excluir</button>`;
+                fileItem.innerHTML = `
+                    <span><i class="fas fa-file"></i> ${fileName}</span>
+                    <button onclick="removeFile('${key}')"><i class="fas fa-trash"></i> Excluir</button>
+                `;
                 fileList.appendChild(fileItem);
             }
         }
@@ -100,14 +110,14 @@
         <!-- Campo de upload para PDF -->
         <label class="custom-file-upload">
             <input type="file" name="pdf" accept=".pdf" required>
-            Escolher PDF
+            <i class="fas fa-upload"></i> Escolher PDF
         </label>
 
         <!-- Campo de upload para lista de CPFs (oculto até que "Buscar Comprovantes" seja selecionado) -->
         <div id="cpf-container" style="display: none;">
             <label class="custom-file-upload">
                 <input type="file" name="cpfs_file" accept=".txt">
-                Escolher Lista de CPFs
+                <i class="fas fa-upload"></i> Escolher Lista de CPFs
             </label>
         </div>
 
@@ -121,7 +131,7 @@
         <div id="file-list" class="file-list"></div>
 
         <!-- Botão de envio -->
-        <button type="submit">Enviar</button>
+        <button type="submit"><i class="fas fa-paper-plane"></i> Enviar</button>
     </form>
 
     <!-- Exibição do resumo e link para download do ZIP -->
@@ -133,7 +143,7 @@
     {% endif %}
 
     {% if zip_file %}
-        <a href="{{ url_for('download_zip') }}" class="download-link">Baixar Comprovantes ZIP</a>
+        <a href="{{ url_for('download_zip') }}" class="download-link"><i class="fas fa-download"></i> Baixar Comprovantes ZIP</a>
     {% endif %}
 </div>
 </body>
