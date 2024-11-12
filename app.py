@@ -5,7 +5,6 @@ import pytesseract
 from PyPDF2 import PdfReader, PdfWriter
 import pdfplumber
 from PIL import Image
-from transformers import pipeline
 import re
 import sys
 import zipfile
@@ -15,8 +14,6 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'PDF_ARCH'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-summarizer = pipeline("summarization")
 
 # Caminho para o arquivo ZIP de saída
 ZIP_PATH = os.path.join(UPLOAD_FOLDER, "comprovantes.zip")
@@ -84,7 +81,7 @@ def extract_text_from_pdf(pdf_path):
     return text
 
 def summarize_text(text):
-    """Gera um resumo do texto usando um modelo de NLP."""
+    """Retorna um resumo simplificado do texto."""
     token_limit = 512  # Ajustado para evitar erros de sequência longa
     tokens = text.split()
 
@@ -93,11 +90,8 @@ def summarize_text(text):
     elif len(tokens) < 100:
         return text
 
-    try:
-        summary = summarizer(text, max_length=130, min_length=30, do_sample=False)
-        return summary[0]['summary_text'] if summary else "Resumo não pôde ser gerado."
-    except Exception as e:
-        return f"Erro ao gerar resumo: {str(e)}"
+    # Como `tokenizers` foi removido, esta é uma versão simplificada do resumo
+    return text[:500] + "..." if len(text) > 500 else text
 
 @app.route('/')
 def index():
