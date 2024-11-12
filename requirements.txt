@@ -3,5 +3,5 @@ PyMuPDF==1.22.0
 pytesseract==0.3.8
 pdfplumber==0.5.28
 Pillow==8.3.1
-transformers==4.7.0  # Escolhi uma versão mais antiga que não dependa fortemente de `tokenizers`.
+transformers==4.6.1  # Versão mais antiga e estável que não depende diretamente de tokenizers.
 torch==2.0.0
