@@ -84,7 +84,7 @@ def summarize_text(text):
     elif len(tokens) < 100:
         return text
 
-    # Como `tokenizers` foi removido, esta é uma versão simplificada do resumo
+    # Versão simplificada do resumo
     return text[:500] + "..." if len(text) > 500 else text
 
 @app.route('/')
@@ -127,4 +127,5 @@ def download_zip():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
